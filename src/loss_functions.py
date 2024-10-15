@@ -1,5 +1,6 @@
 import tensorflow as tf
-import tensorflow_addons as tfa
+#import tensorflow_addons as tfa
+import keras_cv
 
 
 def edge_detail_aggregate_loss(targets, network_output, weights=None, sparse=False):
@@ -54,7 +55,7 @@ def edge_detail_aggregate_loss(targets, network_output, weights=None, sparse=Fal
 
     boundary_targets_pyramid = tf.cast(boundary_targets_pyramid > 0.1, tf.float32)
 
-    sigmoidfocalcrossentropy = tfa.losses.SigmoidFocalCrossEntropy(from_logits=False)(
+    sigmoidfocalcrossentropy = keras_cv.losses.FocalLoss(from_logits=False)(
         boundary_targets_pyramid, network_output
     )
 
@@ -64,7 +65,7 @@ def edge_detail_aggregate_loss(targets, network_output, weights=None, sparse=Fal
 def mb_detail_aggregate_loss(targets, network_output, weights=None, sparse=False):
     target_mb = tf.slice(targets, [0, 0, 0, 2], [-1, -1, -1, 1])
 
-    sigmoidfocalcrossentropy = tfa.losses.SigmoidFocalCrossEntropy(from_logits=False)(
+    sigmoidfocalcrossentropy = keras_cv.losses.FocalLoss(from_logits=False)(
         target_mb, network_output
     )
     return sigmoidfocalcrossentropy
@@ -86,7 +87,7 @@ def scale_output_to_target(output, target):
         output, (h_target, w_target), method=tf.image.ResizeMethod.BILINEAR
     )
     return end_point_error(output_scaled, target)
-    
+
 
 def multi_scale_end_point_error(targets, network_output, weights=None, sparse=False):
     target_flow = tf.slice(targets, [0, 0, 0, 0], [-1, -1, -1, 2])

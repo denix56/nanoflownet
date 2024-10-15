@@ -3,7 +3,7 @@ import glob
 
 def append_files(dir, val=False):
     image0, image1, flow, mb = [], [], [], []
-    dir = dir + "train/" if not val else dir + "val/"
+    dir = os.path.join(dir, "train" if not val else "val")
     flo_list = sorted(glob.glob(os.path.join(dir, "*-flow_01.npy")))
     for flow_map in flo_list:
         flow_map = os.path.basename(flow_map)

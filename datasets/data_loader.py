@@ -1,10 +1,16 @@
+from typing import Any
+
 import numpy as np
+
 import nvidia.dali.fn as fn
 import nvidia.dali.math as math
-import nvidia.dali.plugin.tf as dali_tf
+import nvidia.dali.plugin.pytorch as dali_torch
+# import nvidia.dali.plugin.tf as dali_tf
 import nvidia.dali.types as types
-import tensorflow as tf
+# import tensorflow as tf
 from nvidia.dali.pipeline import Pipeline
+
+import lightning as L
 
 import datasets
 
@@ -113,7 +119,7 @@ def return_dali_data_loader(
             flo = fn.cast(flo, dtype=types.DALIDataType.FLOAT)
 
             if target_height and target_width:
-                resize_factor = min(510 / target_height, 960 / target_width)
+                resize_factor = min(dataset_height / target_height, dataset_width / target_width)
                 image0 = fn.resize(
                     image0,
                     resize_x=int(dataset_width / resize_factor),
@@ -674,7 +680,6 @@ def return_dali_data_loader(
             mb = fn.cast(mb, dtype=types.DALIDataType.FLOAT)
 
             targets = fn.cat(flo, mb, axis_name="C")
-
             pipeline.set_outputs(images, targets)
         return pipeline
 
@@ -717,44 +722,12 @@ def return_dali_data_loader(
             self.pipeline.build()
             self.epoch_size = self.pipeline.epoch_size("Reader") / batch_size
 
-            resize_factor = min(510 / target_height, 960 / target_width)
-
-            channels = 2 if not colorMode else 6
-
-            self.dali_iterator = dali_tf.DALIDataset(
-                pipeline=self.pipeline,
-                batch_size=batch_size,
-                output_shapes=(
-                    (
-                        batch_size,
-                        int(dataset_height / resize_factor) // 32 * 32,
-                        int(dataset_width / resize_factor) // 32 * 32,
-                        channels,
-                    ),
-                    (
-                        batch_size,
-                        int(dataset_height / resize_factor) // 32 * 32,
-                        int(dataset_width / resize_factor) // 32 * 32,
-                        3,
-                    ),
-                )
-                if arch == "flownet2s"
-                else (
-                    (
-                        batch_size,
-                        int(dataset_height / resize_factor) // 16 * 16,
-                        int(dataset_width / resize_factor) // 16 * 16,
-                        channels,
-                    ),
-                    (
-                        batch_size,
-                        int(dataset_height / resize_factor) // 16 * 16,
-                        int(dataset_width / resize_factor) // 16 * 16,
-                        3,
-                    ),
-                ),
-                output_dtypes=(tf.float32, tf.float32),
-                device_id=0,
+            self.dali_iterator = dali_torch.DALIGenericIterator(
+                pipelines=self.pipeline,
+                output_map=['image', 'target'],
+                reader_name='Reader',
+                auto_reset=True,
+                last_batch_policy=dali_torch.LastBatchPolicy.DROP
             )
 
         def __len__(self):
@@ -803,3 +776,56 @@ def return_dali_data_loader(
         arch=arch,
     )
     return train_loader, val_loader, epoch_size
+
+
+class DALIDataModule(L.LightningDataModule):
+    def __init__(self, name: str, root: str, epoch_size: int, batch_size: int, num_workers: int, target_height: int,
+                 target_width: int, mosaicMode: bool, colorMode: bool, split_value: float, split_file: str, arch: str):
+        super().__init__()
+        self.name = name
+        self.root = root
+        self.epoch_size = epoch_size
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.target_height = target_height
+        self.target_width = target_width
+        self.mosaicMode = mosaicMode
+        self.colorMode = colorMode
+        self.split_value = split_value
+        self.split_file = split_file
+        self.arch = arch
+
+    def setup(self, stage=None):
+        self.train_loader, self.val_loader, epoch_size = return_dali_data_loader(
+            self.name,
+            self.root,
+            self.epoch_size,
+            self.batch_size,
+            self.num_workers,
+            self.target_height,
+            self.target_width,
+            self.mosaicMode,
+            self.colorMode,
+            self.split_value,
+            self.split_file,
+            self.arch
+        )
+
+    def train_dataloader(self):
+        return self.train_loader
+
+    def val_dataloader(self):
+        return self.val_loader
+
+    def on_before_batch_transfer(self, batch: Any, dataloader_idx: int) -> Any:
+        if isinstance(batch, list):
+            batch = batch[0]
+        batch['image'] = batch['image'].permute(0, 3, 1, 2).contiguous()
+        if 'target' in batch:
+            batch['target'] = batch['target'].permute(0, 3, 1, 2).contiguous()
+        return batch
+
+    def teardown(self, stage=None):
+        # Reset loaders at the end of each epoch
+        self.train_loader.reset()
+        self.val_loader.reset()

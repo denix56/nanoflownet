@@ -1,0 +1,45 @@
+trainer:
+  accelerator: 'gpu'
+  devices: 0,
+  precision: bf16-mixed
+  fast_dev_run: False
+  benchmark: True
+  num_sanity_val_steps: 0
+  max_epochs: 300
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        monitor: 'val/msep_loss'
+        mode: 'min'
+        save_last: True
+        save_top_k: 1
+        verbose: True
+    - class_path: lightning.pytorch.callbacks.ModelSummary
+      init_args:
+        max_depth: -1
+
+
+model:
+  class_path: models.nanoflownet_lightning.NanoFlowNetModule
+  init_args:
+    detail_guidance: 'motion_boundaries'
+    lr: 1e-3
+    loss_weights: [1, 0.5, 0.25, 1]
+    dataset_size: [120, 160]
+    compile_mode: default
+
+data:
+  class_path: datasets.data_loader.DALIDataModule
+  init_args:
+    name: flying_chairs2
+    root: /mnt/c/Users/denis/Downloads/FlyingChairs2/FlyingChairs2
+    epoch_size: 0
+    batch_size: 8
+    num_workers: 4
+    target_height: 112
+    target_width: 160
+    mosaicMode: False
+    colorMode: False
+    split_value: 0.8
+    split_file: None
+    arch: nanoflownet
