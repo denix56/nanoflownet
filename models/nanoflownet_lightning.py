@@ -65,7 +65,7 @@ class NanoFlowNetModule(L.LightningModule):
             output = output[0]
 
         # Log images
-        if self.current_epoch % 10 == 0:
+        if batch_idx == 0:
             output_vis = output.to(torch.float32)
             for k in range(len(output_vis)):
                 output_flow = output_vis[k, :2].permute(1, 2, 0).cpu().numpy()
