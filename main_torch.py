@@ -10,7 +10,7 @@ class NanoCLI(LightningCLI):
 
 if __name__ == '__main__':
     torch.set_float32_matmul_precision('medium')
-    cli = LightningCLI(run=False)  # True by default
+    cli = NanoCLI(run=False)  # True by default
     # you'll have to call fit yourself:
     ckpt_path = None
     if 'continue' in cli.config:
